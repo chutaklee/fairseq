@@ -50,7 +50,6 @@ def label_smoothed_nll_loss(lprobs, target, epsilon, ignore_index=None, reduce=T
     return loss, nll_loss
 
 
-#------------------------------Gumbel VQ---------------------------------------
 @register_criterion(
     "vq_label_smoothed_cross_entropy", dataclass=LabelSmoothedCrossEntropyCriterionConfig
 )
@@ -155,23 +154,19 @@ class VQLabelSmoothedCrossEntropyCriterion(FairseqCriterion):
         )
 
         #-------------Gumbel VQ-----------------
-        loss_sum = sum(log.get("loss", 0) for log in logging_outputs)
-        nll_loss_sum = sum(log.get("nll_loss", 0) for log in logging_outputs)
-        ntokens = sum(log.get("ntokens", 0) for log in logging_outputs)
-
         vq_prob_perplexity = sum(log.get("vq_prob_perplexity", 0) for log in logging_outputs)
         vq_code_perplexity = sum(log.get("vq_code_perplexity", 0) for log in logging_outputs)
         vq_gumbel_temp = [log.get("vq_gumbel_temp", 0) for log in logging_outputs]
         vq_gumbel_temp = sum(vq_gumbel_temp) / len(vq_gumbel_temp)
 
         metrics.log_scalar(
-            "vq_prob_perplexity", vq_prob_perplexity, sample_size, round=3
+            "vq_prob_perplexity", vq_prob_perplexity
         )
         metrics.log_scalar(
-            "vq_code_perplexity", vq_code_perplexity, sample_size, round=3
+            "vq_code_perplexity", vq_code_perplexity
         )
         metrics.log_scalar(
-            "vq_gumbel_temp", vq_gumbel_temp, round=3
+            "vq_gumbel_temp", vq_gumbel_temp
         )
         #---------------------------------------
 
@@ -199,6 +194,3 @@ class VQLabelSmoothedCrossEntropyCriterion(FairseqCriterion):
         to True will improves distributed training speed.
         """
         return True
-
-
-#-------------------------------------------------------------------------------
