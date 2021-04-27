@@ -1164,7 +1164,7 @@ def vq_transformer_iwslt_de_en(args):
     args.decoder_layers = getattr(args, "decoder_layers", 6)
 
     #---------Gumbel VQ---------------
-    args.vq_num_vars = getattr(args, "vq_num_vars", 512)
+    args.vq_num_vars = getattr(args, "vq_num_vars", 1024)
     args.vq_groups = getattr(args, "vq_groups", 1)
     args.vq_combine_groups = getattr(args, "vq_combine_groups", True)
     args.vq_gumbel_temp = getattr(args, "vq_gumbel_temp", (2.0, 0.5, 0.999995))

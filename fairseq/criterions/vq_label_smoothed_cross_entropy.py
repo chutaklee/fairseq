@@ -154,20 +154,27 @@ class VQLabelSmoothedCrossEntropyCriterion(FairseqCriterion):
         )
 
         #-------------Gumbel VQ-----------------
-        vq_prob_perplexity = sum(log.get("vq_prob_perplexity", 0) for log in logging_outputs)
-        vq_code_perplexity = sum(log.get("vq_code_perplexity", 0) for log in logging_outputs)
-        vq_gumbel_temp = [log.get("vq_gumbel_temp", 0) for log in logging_outputs]
-        vq_gumbel_temp = sum(vq_gumbel_temp) / len(vq_gumbel_temp)
+        """
+        logging_outputs example
+        [{
+            'loss': tensor(27643.8535, device='cuda:0'), 
+            'nll_loss': tensor(27687.8867, device='cuda:0'), 
+            'ntokens': 2931, 
+            'nsentences': 192, 
+            'sample_size': 2931, 
+            'vq_prob_perplexity': tensor(5.5716, device='cuda:0', grad_fn=<SumBackward0>), 
+            'vq_gumbel_temp': 2.0, 
+            'vq_code_perplexity': tensor(5.5294, device='cuda:0')
+        }]
+        """
+        num_logs = len(logging_outputs)
+        vq_prob_perplexity = float(sum(log.get("vq_prob_perplexity") for log in logging_outputs))
+        vq_code_perplexity = float(sum(log.get("vq_code_perplexity") for log in logging_outputs))
+        vq_gumbel_temp = sum([log.get("vq_gumbel_temp", 0) for log in logging_outputs])
 
-        metrics.log_scalar(
-            "vq_prob_perplexity", vq_prob_perplexity
-        )
-        metrics.log_scalar(
-            "vq_code_perplexity", vq_code_perplexity
-        )
-        metrics.log_scalar(
-            "vq_gumbel_temp", vq_gumbel_temp
-        )
+        metrics.log_scalar("vq_prob_perplexity", vq_prob_perplexity / num_logs)
+        metrics.log_scalar("vq_code_perplexity", vq_code_perplexity / num_logs)
+        metrics.log_scalar("vq_gumbel_temp", vq_gumbel_temp / num_logs)
         #---------------------------------------
 
         total = utils.item(sum(log.get("total", 0) for log in logging_outputs))
