@@ -40,7 +40,7 @@ DEFAULT_MAX_TARGET_POSITIONS = 1024
 
 DEFAULT_MIN_PARAMS_TO_WRAP = int(1e8)
 
-#---------------------Gumbel VQ-----------------------------------------------
+#---------------------VQ-----------------------------------------------
 @register_model("vq_transformer")
 class VQTransformerModel(FairseqEncoderDecoderModel):
     """
@@ -198,17 +198,21 @@ class VQTransformerModel(FairseqEncoderDecoderModel):
                             help='scalar quantization noise and scalar quantization at training time')
 
         #---------------------------------------------------------------------------------------------
-        # args for Gumbel VQ
+        # args for VQ
         parser.add_argument('--vq-num-vars', type=int, metavar='D',
                             help='size of a group for vector quantization')
         parser.add_argument('--vq-groups', type=int, metavar='D',
                             help='number of groups for vector quantization')
-        parser.add_argument('--vq-gumbel-temp', type=str, metavar='D',
-                            help='gumbel temperature for training. this should be a tuple of 3 elements: (start, stop, decay factor)')
         parser.add_argument('--vq-combine-groups', type=bool, metavar='D',
                             help='whether to use the vectors for all groups')
         parser.add_argument('--vq-loss-scaling', type=float, metavar='D',
-                            help='loss = nll_loss + gumbel_loss_scaling * gumbel_loss')
+                            help='loss = nll_loss + vq_loss_scaling * gumbel_loss')
+
+        parser.add_argument('--vq-impl', type=str, metavar='D', help="kmeans or gumbel")
+        parser.add_argument('--vq-gumbel-temp', type=str, metavar='D',
+                            help='gumbel temperature for training. this should be a tuple of 3 elements: (start, stop, decay factor)')
+        parser.add_argument('--vq-kmeans-commitment-loss-scaling', type=str, metavar='D',
+                            help="commitment loss coefficient")
         #---------------------------------------------------------------------------------------------
 
 
@@ -772,11 +776,18 @@ class VQTransformerDecoder(FairseqIncrementalDecoder):
         if self.output_projection is None:
             self.build_output_projection(args, dictionary, embed_tokens)
 
-        #-----------------------Gumbel VQ------------------------------------------
-        print("---", f"{embed_dim=}", f"{args.vq_num_vars=}", f"{args.vq_gumbel_temp=}", f"{args.vq_groups=}", f"{args.vq_combine_groups=}", f"{embed_dim=}")
-        self.vector_quantizer = GumbelVectorQuantizer(
-            embed_dim, args.vq_num_vars, args.vq_gumbel_temp, args.vq_groups, args.vq_combine_groups, embed_dim, time_first=True
-        )
+        #-----------------------VQ------------------------------------------
+        print("---", f"{embed_dim=}", f"{args.vq_num_vars=}", f"{args.vq_gumbel_temp=}", f"{args.vq_groups=}", f"{args.vq_combine_groups=}", f"{embed_dim=}", f"{args.vq_kmeans_commitment_loss_scaling=}", "---")
+        if agrs.vq_impl == "gumbel":
+            self.vector_quantizer = GumbelVectorQuantizer(
+                embed_dim, args.vq_num_vars, args.vq_gumbel_temp, args.vq_groups, args.vq_combine_groups, embed_dim, time_first=True
+            )
+        elif args.vq_impl == "kmeans":
+            self.vector_quantizer = KmeansVectorQuantizer(
+                embed_dim, args.vq_num_vars, args.vq_groups, args.vq_combine_groups, embed_dim,
+                time_first=True,
+                gamma=args.vq_kmeans_commitment_loss_scaling
+            )
         #--------------------------------------------------------------------------
 
     def build_output_projection(self, args, dictionary, embed_tokens):
@@ -932,10 +943,15 @@ class VQTransformerDecoder(FairseqIncrementalDecoder):
                 enc.size()[1] == bs
             ), f"Expected enc.shape == (t, {bs}, c) got {enc.shape}"
 
-            #---------Gumbel VQ---------------------------------------
+            #---------VQ---------------------------------------
             vq_output = self.vector_quantizer(enc)
             enc = vq_output.pop('x')
             vq_output["vq_gumbel_temp"] = vq_output.pop("temp")
+
+            if self.args.impl == "kmeans":
+                vq_output["vq_loss"] = vq_output.pop("kemans_loss")
+            elif self.args.vq_impl == "gumbel":
+                vq_output["vq_loss"] = (vq_output["num_vars"] - vq_output["prob_perplexity"]) / vq_output["num_vars"]
             #---------------------------------------------------------
 
         if encoder_out is not None and len(encoder_out["encoder_padding_mask"]) > 0:
@@ -1163,11 +1179,15 @@ def vq_transformer_iwslt_de_en(args):
     args.decoder_attention_heads = getattr(args, "decoder_attention_heads", 4)
     args.decoder_layers = getattr(args, "decoder_layers", 6)
 
-    #---------Gumbel VQ---------------
+    #---------VQ---------------
+    args.vq_impl = getattr(args, "vq_impl", "kmeans")
+
     args.vq_num_vars = getattr(args, "vq_num_vars", 1024)
     args.vq_groups = getattr(args, "vq_groups", 1)
     args.vq_combine_groups = getattr(args, "vq_combine_groups", True)
-    args.vq_gumbel_temp = getattr(args, "vq_gumbel_temp", (2.0, 0.5, 0.999995))
     args.vq_loss_scaling = getattr(args, "vq_loss_scaling", 0.1)
+
+    args.vq_gumbel_temp = getattr(args, "vq_gumbel_temp", (2.0, 0.5, 0.999995))
+    args.vq_kmeans_commitment_loss_scaling = getattr(args,"vq_kmeans_commitment_loss_scaling", 0.25)
     #---------------------------------
     base_architecture(args)

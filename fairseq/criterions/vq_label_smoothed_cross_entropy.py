@@ -87,12 +87,17 @@ class VQLabelSmoothedCrossEntropyCriterion(FairseqCriterion):
             "ntokens": sample["ntokens"],
             "nsentences": sample["target"].size(0),
             "sample_size": sample_size,
-            #-------Gumbel VQ-----------
-            "vq_prob_perplexity": net_output[1]['prob_perplexity'],
-            "vq_gumbel_temp": net_output[1]["vq_gumbel_temp"],
+            #-------VQ-----------
             "vq_code_perplexity": net_output[1]['code_perplexity']
             #---------------------------
         }
+
+        if model.args.vq_impl == "gumbel":
+            logging_output.update({
+                "vq_prob_perplexity": net_output[1]['prob_perplexity'],
+                "vq_gumbel_temp": net_output[1]["vq_gumbel_temp"]
+            })
+
         if self.report_accuracy:
             n_correct, total = self.compute_accuracy(model, net_output, sample)
             logging_output["n_correct"] = utils.item(n_correct.data)
@@ -120,9 +125,8 @@ class VQLabelSmoothedCrossEntropyCriterion(FairseqCriterion):
             ignore_index=self.padding_idx,
             reduce=reduce,
         )
-        #------------------------Gumbel VQ--------------------------
-        vq_loss = (net_output[1]["num_vars"] - net_output[1]["prob_perplexity"]) / net_output[1]["num_vars"]
-        loss += model.args.vq_loss_scaling * vq_loss
+        #------------------------VQ--------------------------
+        loss += model.args.vq_loss_scaling * net_output[1]["vq_loss"]
         #-----------------------------------------------------------
         return loss, nll_loss
 
@@ -153,7 +157,7 @@ class VQLabelSmoothedCrossEntropyCriterion(FairseqCriterion):
             "ppl", lambda meters: utils.get_perplexity(meters["nll_loss"].avg)
         )
 
-        #-------------Gumbel VQ-----------------
+        #-------------VQ-----------------
         """
         logging_outputs example
         [{
@@ -167,14 +171,16 @@ class VQLabelSmoothedCrossEntropyCriterion(FairseqCriterion):
             'vq_code_perplexity': tensor(5.5294, device='cuda:0')
         }]
         """
-        num_logs = len(logging_outputs)
-        vq_prob_perplexity = float(sum(log.get("vq_prob_perplexity") for log in logging_outputs))
         vq_code_perplexity = float(sum(log.get("vq_code_perplexity") for log in logging_outputs))
-        vq_gumbel_temp = sum([log.get("vq_gumbel_temp", 0) for log in logging_outputs])
-
-        metrics.log_scalar("vq_prob_perplexity", vq_prob_perplexity / num_logs)
+        num_logs = len(logging_outputs)
         metrics.log_scalar("vq_code_perplexity", vq_code_perplexity / num_logs)
-        metrics.log_scalar("vq_gumbel_temp", vq_gumbel_temp / num_logs)
+
+        if "vq_gumbel_temp" in logging_outputs[0].keys():
+            vq_prob_perplexity = float(sum(log.get("vq_prob_perplexity") for log in logging_outputs))
+            vq_gumbel_temp = sum([log.get("vq_gumbel_temp", 0) for log in logging_outputs])
+
+            metrics.log_scalar("vq_prob_perplexity", vq_prob_perplexity / num_logs)
+            metrics.log_scalar("vq_gumbel_temp", vq_gumbel_temp / num_logs)
         #---------------------------------------
 
         total = utils.item(sum(log.get("total", 0) for log in logging_outputs))
