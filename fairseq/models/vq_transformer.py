@@ -778,7 +778,7 @@ class VQTransformerDecoder(FairseqIncrementalDecoder):
             self.build_output_projection(args, dictionary, embed_tokens)
 
         #-----------------------VQ------------------------------------------
-        print("---", f"{embed_dim=}", f"{args.vq_num_vars=}", f"{args.vq_gumbel_temp=}", f"{args.vq_groups=}", f"{args.vq_combine_groups=}", f"{embed_dim=}", f"{args.vq_kmeans_commitment_loss_scaling=}", "---")
+        #print("---", f"{embed_dim=}", f"{args.vq_num_vars=}", f"{args.vq_gumbel_temp=}", f"{args.vq_groups=}", f"{args.vq_combine_groups=}", f"{embed_dim=}", f"{args.vq_kmeans_commitment_loss_scaling=}", "---")
         if args.vq_impl == "gumbel":
             self.vector_quantizer = GumbelVectorQuantizer(
                 embed_dim, args.vq_num_vars, args.vq_gumbel_temp, args.vq_groups, args.vq_combine_groups, embed_dim, time_first=True
@@ -947,10 +947,11 @@ class VQTransformerDecoder(FairseqIncrementalDecoder):
             #---------VQ---------------------------------------
             vq_output = self.vector_quantizer(enc)
             enc = vq_output.pop('x')
-            vq_output["vq_gumbel_temp"] = vq_output.pop("temp")
+            if "temp" in vq_output.keys():
+                vq_output["vq_gumbel_temp"] = vq_output.pop("temp")
 
-            if self.args.impl == "kmeans":
-                vq_output["vq_loss"] = vq_output.pop("kemans_loss")
+            if self.args.vq_impl == "kmeans":
+                vq_output["vq_loss"] = vq_output.pop("kmeans_loss")
             elif self.args.vq_impl == "gumbel":
                 vq_output["vq_loss"] = (vq_output["num_vars"] - vq_output["prob_perplexity"]) / vq_output["num_vars"]
             #---------------------------------------------------------
