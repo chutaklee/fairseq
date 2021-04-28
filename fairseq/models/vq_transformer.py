@@ -778,7 +778,7 @@ class VQTransformerDecoder(FairseqIncrementalDecoder):
 
         #-----------------------VQ------------------------------------------
         print("---", f"{embed_dim=}", f"{args.vq_num_vars=}", f"{args.vq_gumbel_temp=}", f"{args.vq_groups=}", f"{args.vq_combine_groups=}", f"{embed_dim=}", f"{args.vq_kmeans_commitment_loss_scaling=}", "---")
-        if agrs.vq_impl == "gumbel":
+        if args.vq_impl == "gumbel":
             self.vector_quantizer = GumbelVectorQuantizer(
                 embed_dim, args.vq_num_vars, args.vq_gumbel_temp, args.vq_groups, args.vq_combine_groups, embed_dim, time_first=True
             )
